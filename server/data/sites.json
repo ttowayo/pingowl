@@ -1,0 +1,40 @@
+{
+  "b721849e-a3ff-454e-95c1-27d0d7ca30b2": {
+    "sites": [
+      {
+        "id": "1777257662126",
+        "name": "kc.rchada.direct",
+        "url": "https://kc.rchada.direct/",
+        "checks": [],
+        "enabled": true
+      },
+      {
+        "id": "1777258255199",
+        "name": "bnk.rchada.direct",
+        "url": "https://bnk.rchada.direct/",
+        "checks": [],
+        "enabled": true
+      },
+      {
+        "id": "1777261995670",
+        "name": "hana.rchada.direct",
+        "url": "https://hana.rchada.direct",
+        "checks": [],
+        "enabled": true
+      }
+    ],
+    "settings": {}
+  },
+  "55d8216a-12e9-40b0-9aaf-3e38043b9350": {
+    "sites": [
+      {
+        "id": "1777262441475",
+        "name": "rchada.com",
+        "url": "https://rchada.com/",
+        "checks": [],
+        "enabled": true
+      }
+    ],
+    "settings": {}
+  }
+}

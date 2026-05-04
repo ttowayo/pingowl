@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Site Monitor Dashboard</title>
+    <link rel="stylesheet" href="./css/style.css" />
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Remix Icon -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <header>
+        <div class="container">
+          <div class="logo">
+            <i class="ri-eye-2-line"></i>
+            <span>PingOwl</span>
+          </div>
+          <div class="header-actions">
+            <div id="user-info-area" class="user-info hidden">
+              <span class="user-name"
+                ><i class="ri-user-line"></i>
+                <span id="display-username"></span>님</span
+              >
+              <button id="logout-btn" class="btn btn-sm btn-outline">
+                로그아웃
+              </button>
+            </div>
+            <button id="login-btn" class="btn btn-outline">로그인</button>
+            <button id="register-btn" class="btn btn-primary">회원가입</button>
+            <button id="refresh-all" class="btn btn-secondary">
+              <i class="ri-refresh-line"></i> 전체 체크
+            </button>
+            <button id="add-site" class="btn btn-secondary hidden">
+              <i class="ri-add-line"></i> 사이트 추가
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Stats Overview -->
+      <section class="stats">
+        <div class="container grid">
+          <div class="stat-card" id="stat-total">
+            <span class="label">전체 사이트</span>
+            <span class="value">0</span>
+          </div>
+          <div class="stat-card" id="stat-online">
+            <span class="label">정상</span>
+            <span class="value color-success">0</span>
+          </div>
+          <div class="stat-card" id="stat-slow">
+            <span class="label">응답 느림</span>
+            <span class="value color-warning">0</span>
+          </div>
+          <div class="stat-card" id="stat-offline">
+            <span class="label">다운됨</span>
+            <span class="value color-danger">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dashboard Grid -->
+      <main class="dashboard">
+        <div class="container">
+          <div id="site-grid" class="site-grid">
+            <!-- Site cards will be injected here -->
+            <div class="loading-state">
+              <div class="spinner"></div>
+              <p>데이터를 불러오는 중...</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Modal: Add/Edit Site -->
+      <div id="modal-site" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="modal-title">사이트 추가</h2>
+            <button class="close-modal"><i class="ri-close-line"></i></button>
+          </div>
+          <form id="site-form">
+            <input type="hidden" id="site-id" />
+            <div class="form-group">
+              <label for="site-name">사이트 이름</label>
+              <input
+                type="text"
+                id="site-name"
+                placeholder="예: 메인 홈페이지"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="site-url">URL</label>
+              <input
+                type="url"
+                id="site-url"
+                placeholder="https://example.com"
+                required
+              />
+            </div>
+            <div class="check-pages-section">
+              <div class="section-header">
+                <h3>체크할 하위 페이지</h3>
+              </div>
+
+              <!-- WEB 페이지 체크 영역 -->
+              <div class="sub-section">
+                <div class="sub-section-header">
+                  <span class="sub-title"><i class="ri-global-line"></i> WEB 페이지 (키워드 매칭)</span>
+                  <button type="button" id="add-web-check" class="mini-add-btn">
+                    <i class="ri-add-line"></i> 웹페이지 추가
+                  </button>
+                </div>
+                <div id="web-checks-list" class="checks-list"></div>
+              </div>
+
+              <!-- API 접속 체크 영역 -->
+              <div class="sub-section">
+                <div class="sub-section-header">
+                  <span class="sub-title"><i class="ri-api-line"></i> API 접속 (상태 체크)</span>
+                  <button type="button" id="add-api-check" class="mini-add-btn">
+                    <i class="ri-add-line"></i> API 추가
+                  </button>
+                </div>
+                <div id="api-checks-list" class="checks-list"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-primary">저장</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <!-- Modal: Auth -->
+      <div id="modal-auth" class="modal">
+        <div class="modal-content auth-container">
+          <div class="modal-header">
+            <h2>환영합니다</h2>
+            <button class="close-modal"><i class="ri-close-line"></i></button>
+          </div>
+          <div class="auth-tabs">
+            <div class="auth-tab active" data-target="login-form">로그인</div>
+            <div class="auth-tab" data-target="register-form">회원가입</div>
+          </div>
+
+          <form id="login-form" class="auth-form active">
+            <div class="form-group">
+              <label>이메일</label>
+              <input type="email" name="email" required />
+            </div>
+            <div class="form-group">
+              <label>비밀번호</label>
+              <input type="password" name="password" required />
+            </div>
+            <button type="submit" class="btn btn-primary">로그인</button>
+          </form>
+
+          <form id="register-form" class="auth-form">
+            <div class="form-group">
+              <label>이름 (닉네임)</label>
+              <input type="text" name="username" required />
+            </div>
+            <div class="form-group">
+              <label>이메일</label>
+              <input type="email" name="email" required />
+            </div>
+            <div class="form-group">
+              <label>비밀번호</label>
+              <input type="password" name="password" required />
+            </div>
+            <div class="form-group">
+              <label>비밀번호 확인</label>
+              <input type="password" name="passwordConfirm" required />
+            </div>
+            <button type="submit" class="btn btn-primary">회원가입</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
