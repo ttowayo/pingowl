@@ -1,6 +1,7 @@
 import { storage } from './storage.js';
 import { monitor } from './monitor.js';
 import { ui } from './ui.js';
+import { API_BASE } from './config.js';
 
 let appData = {
     sites: [],
@@ -143,7 +144,7 @@ function setupEventListeners() {
         delete data.passwordConfirm;
         
         try {
-            const res = await fetch('/api/auth/register', {
+            const res = await fetch(`${API_BASE}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -165,7 +166,7 @@ function setupEventListeners() {
         const data = Object.fromEntries(formData.entries());
         
         try {
-            const res = await fetch('/api/auth/login', {
+            const res = await fetch(`${API_BASE}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -328,7 +329,7 @@ async function saveSite() {
     let ogImage = null;
     let favicon = null;
     try {
-        const metaRes = await fetch(`/api/metadata?url=${encodeURIComponent(url)}`);
+        const metaRes = await fetch(`${API_BASE}/api/metadata?url=${encodeURIComponent(url)}`);
         const metaData = await metaRes.json();
         ogImage = metaData.ogImage;
         favicon = metaData.favicon;

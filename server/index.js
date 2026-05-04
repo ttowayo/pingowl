@@ -15,10 +15,9 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 app.use(cors());
 app.use(express.json());
-const distPath = path.join(__dirname, '../client/dist');
-if (require('fs').existsSync(distPath)) {
-    app.use(express.static(distPath));
-}
+// Render 등 배포 환경에서는 상대 경로 주의
+const distPath = path.join(__dirname, 'client/dist'); 
+// (참고: 서버와 클라이언트가 분리 배포될 것이므로 이 부분은 실제로는 사용되지 않을 가능성이 높음)
 
 // JWT 검증 미들웨어 (Supabase Auth 연동)
 const authenticateToken = async (req, res, next) => {
@@ -366,6 +365,6 @@ setTimeout(() => {
     setInterval(runBackgroundMonitor, 300000); 
 }, 60000);
 
-app.listen(PORT, '127.0.0.1', () => {
-    console.log(`Proxy server running on http://127.0.0.1:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
 });

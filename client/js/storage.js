@@ -1,3 +1,5 @@
+import { API_BASE } from './config.js';
+
 const STORAGE_KEY = 'site_monitor_data';
 const AUTH_KEY = 'site_monitor_auth';
 
@@ -34,7 +36,7 @@ export const storage = {
         }
 
         try {
-            await fetch('/api/sites', {
+            await fetch(`${API_BASE}/api/sites`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -55,7 +57,7 @@ export const storage = {
         }
 
         try {
-            const response = await fetch('/api/sites', {
+            const response = await fetch(`${API_BASE}/api/sites`, {
                 headers: {
                     'Authorization': `Bearer ${auth.token}`
                 }

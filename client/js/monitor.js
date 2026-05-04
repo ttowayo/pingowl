@@ -1,11 +1,13 @@
+import { API_BASE } from './config.js';
+
 export const monitor = {
     /**
      * 사이트 하나의 상태를 체크합니다.
      */
     async checkSite(site) {
-        // 백엔드 프록시 서버 API 엔드포인트 사용 (Vite 프록시 설정을 거침)
-        const CHECK_API_URL = '/api/check?url=';
-        const KEYWORD_BASE_URL = '/api/check-keyword';
+        // 백엔드 프록시 서버 API 엔드포인트 사용
+        const CHECK_API_URL = `${API_BASE}/api/check?url=`;
+        const KEYWORD_BASE_URL = `${API_BASE}/api/check-keyword`;
 
         try {
             console.log(`[Monitor] Checking Main Site: ${site.name} (${site.url})`);
