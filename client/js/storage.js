@@ -28,6 +28,11 @@ export const storage = {
         localStorage.removeItem(AUTH_KEY);
     },
 
+    clearAll() {
+        localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+    },
+
     async save(data) {
         const auth = this.getAuth();
         if (!auth) {
@@ -63,7 +68,7 @@ export const storage = {
                 }
             });
             if (response.status === 401 || response.status === 403) {
-                this.clearAuth();
+                this.clearAll();
                 window.location.reload();
                 return DEFAULT_DATA;
             }

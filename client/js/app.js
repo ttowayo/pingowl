@@ -8,6 +8,7 @@ let appData = {
     settings: {},
     results: []
 };
+let refreshIntervalId = null;
 
 /**
  * 앱 초기화
@@ -21,7 +22,7 @@ async function init() {
     // 자동 새로고침 설정 (로그인 시에만)
     if (storage.getAuth()) {
         await checkAllSites();
-        setInterval(checkAllSites, (appData.settings.refreshInterval || 300) * 1000);
+        refreshIntervalId = setInterval(checkAllSites, (appData.settings.refreshInterval || 300) * 1000);
     } else {
         render(); // 비로그인 시 기본 렌더링
     }
@@ -112,7 +113,10 @@ function setupEventListeners() {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
-            storage.clearAuth();
+            if (refreshIntervalId) clearInterval(refreshIntervalId);
+            appData.sites = [];
+            appData.results = [];
+            storage.clearAll();
             window.location.reload();
         };
     }
