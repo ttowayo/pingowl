@@ -35,10 +35,28 @@ async function init() {
 const notifiedErrors = new Map();
 
 function initNotifications() {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') {
-        Notification.requestPermission();
+    const btn = document.getElementById('notify-btn');
+    if (!btn) return;
+
+    // 브라우저가 알림을 지원하지 않거나 이미 허용/차단된 상태면 버튼 숨김
+    if (!('Notification' in window) || Notification.permission !== 'default') {
+        btn.classList.add('hidden');
+        return;
     }
+
+    // 권한이 미결정('default')일 때만 버튼 표시
+    // (브라우저 정책상 권한 요청은 사용자 클릭 안에서 해야 프롬프트가 뜸)
+    btn.classList.remove('hidden');
+    btn.onclick = async () => {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            btn.classList.add('hidden');
+            sendNotification('🔔 PingOwl 알림 켜짐', '사이트 에러가 발생하면 이렇게 알려드립니다.');
+        } else if (permission === 'denied') {
+            btn.classList.add('hidden');
+            alert('알림이 차단되었습니다.\n다시 켜려면 주소창 왼쪽 자물쇠(사이트 설정) > 알림 > 허용으로 변경해주세요.');
+        }
+    };
 }
 
 function sendNotification(title, body) {
