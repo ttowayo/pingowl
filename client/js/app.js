@@ -9,6 +9,30 @@ let appData = {
     results: []
 };
 let refreshIntervalId = null;
+let siteLogsMap = {}; // site_id → 최근 1시간 체크 로그 (오름차순) — 카드 미니 그래프용
+
+/**
+ * 전체 사이트의 최근 1시간 로그를 한 번에 조회 (5분 주기 서버 체크 기준)
+ */
+async function loadRecentLogs() {
+    const auth = storage.getAuth();
+    if (!auth) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/logs?hours=1&limit=2000`, {
+            headers: { 'Authorization': `Bearer ${auth.token}` }
+        });
+        if (!res.ok) return;
+        const logs = await res.json(); // 최신순
+        const map = {};
+        for (const log of logs) {
+            (map[log.site_id] = map[log.site_id] || []).push(log);
+        }
+        Object.values(map).forEach(arr => arr.reverse()); // 오름차순으로
+        siteLogsMap = map;
+    } catch (err) {
+        console.warn('최근 로그 조회 실패:', err);
+    }
+}
 
 /**
  * 앱 초기화
@@ -22,6 +46,7 @@ async function init() {
     // 자동 새로고침 설정 (로그인 시에만)
     if (storage.getAuth()) {
         initNotifications();
+        await loadRecentLogs();
         await checkAllSites();
         refreshIntervalId = setInterval(checkAllSites, (appData.settings.refreshInterval || 300) * 1000);
     } else {
@@ -417,7 +442,11 @@ async function checkAllSites() {
     });
 
     await Promise.allSettled(checkPromises);
-    
+
+    // 카드 미니 그래프용 최근 1시간 로그 갱신 (서버가 5분마다 쌓는 데이터)
+    await loadRecentLogs();
+    render();
+
     if (refreshBtn) {
         refreshBtn.disabled = false;
         refreshBtn.innerHTML = '<i class="ri-refresh-line"></i> 전체 체크';
@@ -491,7 +520,7 @@ async function refreshData(shouldCheck = true) {
  */
 function render() {
     ui.renderStats(appData.results, appData.settings.responseTimeThresholds);
-    ui.renderSiteGrid(appData.sites, appData.results, appData.settings.responseTimeThresholds);
+    ui.renderSiteGrid(appData.sites, appData.results, appData.settings.responseTimeThresholds, siteLogsMap);
     // 렌더링 후에 드래그 정렬 기능을 다시 초기화해야 함
     initSortable();
 }
