@@ -146,8 +146,26 @@ export const ui = {
                 }
             }
             
-            sparklineHtml += `<div class="spark-bar ${barClass}" style="height: ${height}" title="${data ? (data.online ? data.value + 'ms' : 'Error') : 'No data'}"></div>`;
+            // 툴팁에 체크 시각 포함 (예: "오후 2:24:20 · 396ms")
+            let barTitle = 'No data';
+            if (data) {
+                const barTime = data.time ? new Date(data.time).toLocaleTimeString() : '';
+                const barValue = data.online ? `${data.value}ms` : 'Error';
+                barTitle = barTime ? `${barTime} · ${barValue}` : barValue;
+            }
+            sparklineHtml += `<div class="spark-bar ${barClass}" style="height: ${height}" title="${barTitle}"></div>`;
         }
+
+        // 그래프 하단에 히스토리 시간 범위 표시 (가장 오래된 체크 ~ 최신 체크)
+        const fmtShortTime = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const oldestEntry = history.find(h => h && h.time);
+        const newestEntry = [...history].reverse().find(h => h && h.time);
+        const timeRangeHtml = (oldestEntry && newestEntry) ? `
+            <div class="sparkline-times">
+                <span>${fmtShortTime(oldestEntry.time)}</span>
+                <span>${fmtShortTime(newestEntry.time)}</span>
+            </div>
+        ` : '';
 
         const currentResponseTime = result.responseTime ? `${result.responseTime}ms` : (result.status === 'pending' ? '...' : 'OFFLINE');
         const previewHtml = `
@@ -159,6 +177,7 @@ export const ui = {
                 <div class="sparkline-bars">
                     ${sparklineHtml}
                 </div>
+                ${timeRangeHtml}
             </div>
         `;
 

@@ -298,6 +298,17 @@ header .container {
   gap: 3px;
 }
 
+.sparkline-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.6;
+  font-family: 'Inter', sans-serif;
+}
+
 .spark-bar {
   flex: 1;
   border-radius: 2px 2px 0 0;

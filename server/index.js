@@ -11,7 +11,21 @@ const PORT = process.env.PORT || 3001;
 // Supabase 설정
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// 인증용 클라이언트 (회원가입/로그인/토큰 검증) — 요청 간 세션이 공유되지 않도록 저장 금지
+const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+});
+
+// DB 작업용 클라이언트 — service_role 키로 RLS를 우회 (서버 전용, 절대 클라이언트에 노출 금지)
+const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+});
+
+if (!supabaseServiceKey) {
+    console.warn('[Server] SUPABASE_SERVICE_ROLE_KEY가 설정되지 않았습니다. RLS가 켜진 테이블은 조회/저장이 실패할 수 있습니다.');
+}
 
 app.use(cors());
 app.use(express.json());
@@ -26,7 +40,7 @@ const authenticateToken = async (req, res, next) => {
 
     if (!token) return res.status(401).json({ error: '인증이 필요합니다.' });
 
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
 
     if (error || !user) {
         return res.status(403).json({ error: '유효하지 않은 토큰입니다.' });
@@ -43,7 +57,7 @@ app.post('/api/auth/register', async (req, res) => {
     console.log('[API] /api/auth/register 호출됨:', req.body.email);
     const { email, username, password } = req.body;
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseAuth.auth.signUp({
         email,
         password,
         options: {
@@ -64,7 +78,7 @@ app.post('/api/auth/login', async (req, res) => {
     console.log('[API] /api/auth/login 호출됨:', req.body.email);
     const { email, password } = req.body;
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
         email,
         password
     });
@@ -265,6 +279,31 @@ app.get('/api/check-keyword', async (req, res) => {
     }
 });
 
+// 체크 로그 조회 (본인 로그만)
+// 쿼리: siteId(선택), hours(기본 24), limit(기본 500, 최대 2000)
+app.get('/api/logs', authenticateToken, async (req, res) => {
+    const { siteId } = req.query;
+    const hours = Math.max(parseInt(req.query.hours, 10) || 24, 1);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 500, 2000);
+
+    let query = supabase
+        .from('check_logs')
+        .select('site_id, site_name, url, checked_at, response_time, status_code, online')
+        .eq('user_id', req.user.id)
+        .gte('checked_at', new Date(Date.now() - hours * 3600 * 1000).toISOString())
+        .order('checked_at', { ascending: false })
+        .limit(limit);
+
+    if (siteId) query = query.eq('site_id', siteId);
+
+    const { data, error } = await query;
+    if (error) {
+        console.error('[API] 로그 조회 오류:', error.message);
+        return res.status(500).json({ error: error.message });
+    }
+    res.json(data);
+});
+
 // 헬스체크
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -304,6 +343,7 @@ async function runBackgroundMonitor() {
             if (!appData || !appData.sites || appData.sites.length === 0) continue;
 
             let isUpdated = false;
+            const logRows = []; // check_logs 테이블에 쌓을 로그
 
             // 해당 사용자의 모든 사이트 체크
             for (const site of appData.sites) {
@@ -331,9 +371,20 @@ async function runBackgroundMonitor() {
 
                     // 15개 유지
                     if (site.history.length > 15) site.history.shift();
-                    
+
                     site.lastChecked = new Date().toISOString();
                     isUpdated = true;
+
+                    logRows.push({
+                        user_id: userId,
+                        site_id: String(site.id),
+                        site_name: site.name || null,
+                        url: site.url,
+                        checked_at: new Date().toISOString(),
+                        response_time: responseTime,
+                        status_code: response.status,
+                        online: online
+                    });
 
                     // (옵션) 키워드 체크 등 추가 로직이 필요하면 여기서 수행 가능
                 } catch (err) {
@@ -342,6 +393,17 @@ async function runBackgroundMonitor() {
                     site.history.push({ time: Date.now(), value: 0, online: false });
                     if (site.history.length > 15) site.history.shift();
                     isUpdated = true;
+
+                    logRows.push({
+                        user_id: userId,
+                        site_id: String(site.id),
+                        site_name: site.name || null,
+                        url: site.url,
+                        checked_at: new Date().toISOString(),
+                        response_time: Date.now() - start,
+                        status_code: null,
+                        online: false
+                    });
                 }
             }
 
@@ -351,6 +413,18 @@ async function runBackgroundMonitor() {
                     .from('sites')
                     .update({ data: appData, updated_at: new Date().toISOString() })
                     .eq('user_id', userId);
+            }
+
+            // 체크 로그 적재 (테이블이 없어도 모니터링 자체는 계속 동작)
+            if (logRows.length > 0) {
+                const { error: logError } = await supabase
+                    .from('check_logs')
+                    .insert(logRows);
+                if (logError) {
+                    console.error('[Background] 체크 로그 저장 실패:', logError.message);
+                } else {
+                    console.log(`[Background] 체크 로그 ${logRows.length}건 저장`);
+                }
             }
         }
         console.log('[Background] 모든 사이트 체크 완료');
