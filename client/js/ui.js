@@ -202,6 +202,9 @@ export const ui = {
         }
 
         const currentResponseTime = result.responseTime ? `${result.responseTime}ms` : (result.status === 'pending' ? '...' : 'OFFLINE');
+        // 범례에 표시할 정상/느림 기준 (ms → 초, 예: 2000 → 2초, 1500 → 1.5초)
+        const normalMs = safeThresholds.normal;
+        const normalSec = `${normalMs % 1000 === 0 ? normalMs / 1000 : (normalMs / 1000).toFixed(1)}초`;
         const previewHtml = `
             <div class="sparkline-container">
                 <div class="sparkline-header">
@@ -213,9 +216,9 @@ export const ui = {
                 </div>
                 ${timeRangeHtml}
                 <div class="sparkline-legend">
-                    <span><i class="legend-dot dot-normal"></i>정상</span>
-                    <span><i class="legend-dot dot-warning"></i>느림</span>
-                    <span><i class="legend-dot dot-danger"></i>다운</span>
+                    <span title="응답이 ${normalSec} 미만"><i class="legend-dot dot-normal"></i>정상 &lt;${normalSec}</span>
+                    <span title="응답이 ${normalSec} 이상"><i class="legend-dot dot-warning"></i>느림 ≥${normalSec}</span>
+                    <span title="사이트 접속 실패"><i class="legend-dot dot-danger"></i>다운</span>
                 </div>
             </div>
         `;

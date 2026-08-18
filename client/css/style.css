@@ -333,10 +333,11 @@ header .container {
 .sparkline-legend {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 7px;
   margin-top: 4px;
   font-size: 0.55rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .sparkline-legend span {
