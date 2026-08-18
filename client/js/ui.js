@@ -14,7 +14,7 @@ export const ui = {
         document.querySelector('#stat-offline .value').textContent = offline;
     },
 
-    renderSiteGrid(sites, results, thresholds) {
+    renderSiteGrid(sites, results, thresholds, siteLogsMap = {}) {
         const grid = document.getElementById('site-grid');
         grid.innerHTML = '';
 
@@ -29,12 +29,12 @@ export const ui = {
 
         sites.forEach(site => {
             const result = results.find(r => r.id === site.id) || { online: false, status: 'pending' };
-            const card = this.createSiteCard(site, result, thresholds);
+            const card = this.createSiteCard(site, result, thresholds, siteLogsMap[site.id] || null);
             grid.appendChild(card);
         });
     },
 
-    createSiteCard(site, result, thresholds) {
+    createSiteCard(site, result, thresholds, recentLogs = null) {
         // thresholds가 정의되지 않았을 경우를 대비한 기본값 설정
         const safeThresholds = thresholds || { normal: 2000, slow: 5000 };
         
@@ -120,58 +120,92 @@ export const ui = {
 
         const timeStr = result.lastChecked ? new Date(result.lastChecked).toLocaleTimeString() : '--:--:--';
 
-        // 히스토리 그래프 렌더링 로직 (최대 15개 막대)
-        const history = site.history || [];
-        const maxHistory = 15;
-        
-        // 그래프 막대 생성
-        let sparklineHtml = '';
-        for (let i = 0; i < maxHistory; i++) {
-            const data = history[i] || null;
+        // 미니 그래프: 서버 로그 기반 "최근 1시간" 고정 창 (5분 단위 12칸)
+        // 로그가 없으면(비로그인 등) 기존 히스토리 방식으로 폴백
+        const fmtShortTime = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const buildBar = (online, value, title) => {
             let barClass = 'bar-empty';
-            let height = '4px'; // 데이터 없을 때 최소 높이
-            
-            if (data) {
-                if (!data.online) {
+            let height = '4px';
+            if (online !== null) {
+                if (!online) {
                     barClass = 'bar-error';
                     height = '100%';
                 } else {
-                    if (data.value < safeThresholds.normal) barClass = 'bar-normal';
-                    else if (data.value < safeThresholds.slow) barClass = 'bar-warning';
+                    if (value < safeThresholds.normal) barClass = 'bar-normal';
+                    else if (value < safeThresholds.slow) barClass = 'bar-warning';
                     else barClass = 'bar-danger';
-                    
                     // 최대 slow 기준(기본 5000ms)으로 높이 계산 (최소 15% ~ 최대 100%)
-                    const percentage = Math.min(Math.max((data.value / safeThresholds.slow) * 100, 15), 100);
-                    height = `${percentage}%`;
+                    height = `${Math.min(Math.max((value / safeThresholds.slow) * 100, 15), 100)}%`;
                 }
             }
-            
-            // 툴팁에 체크 시각 포함 (예: "오후 2:24:20 · 396ms")
-            let barTitle = 'No data';
-            if (data) {
-                const barTime = data.time ? new Date(data.time).toLocaleTimeString() : '';
-                const barValue = data.online ? `${data.value}ms` : 'Error';
-                barTitle = barTime ? `${barTime} · ${barValue}` : barValue;
-            }
-            sparklineHtml += `<div class="spark-bar ${barClass}" style="height: ${height}" title="${barTitle}"></div>`;
-        }
+            return `<div class="spark-bar ${barClass}" style="height: ${height}" title="${title}"></div>`;
+        };
 
-        // 그래프 하단에 히스토리 시간 범위 표시 (가장 오래된 체크 ~ 최신 체크)
-        const fmtShortTime = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const oldestEntry = history.find(h => h && h.time);
-        const newestEntry = [...history].reverse().find(h => h && h.time);
-        const timeRangeHtml = (oldestEntry && newestEntry) ? `
-            <div class="sparkline-times">
-                <span>${fmtShortTime(oldestEntry.time)}</span>
-                <span>${fmtShortTime(newestEntry.time)}</span>
-            </div>
-        ` : '';
+        let sparklineHtml = '';
+        let timeRangeHtml = '';
+        let trendLabel = '';
+
+        if (recentLogs && recentLogs.length > 0) {
+            // 최근 1시간을 5분 슬롯 12개로 나누고, 각 슬롯에 해당 시간대의 체크 결과 배치
+            const WINDOW_MS = 60 * 60 * 1000;
+            const SLOTS = 12;
+            const slotMs = WINDOW_MS / SLOTS;
+            const windowStart = Date.now() - WINDOW_MS;
+
+            const buckets = new Array(SLOTS).fill(null);
+            recentLogs.forEach(log => {
+                const t = new Date(log.checked_at).getTime();
+                const idx = Math.floor((t - windowStart) / slotMs);
+                if (idx >= 0 && idx < SLOTS) buckets[idx] = log; // 같은 슬롯에 여러 건이면 최신 것
+            });
+
+            sparklineHtml = buckets.map(log => {
+                if (!log) return buildBar(null, 0, '체크 없음');
+                const title = `${fmtShortTime(log.checked_at)} · ${log.online ? log.response_time + 'ms' : '다운'}`;
+                return buildBar(log.online, log.response_time, title);
+            }).join('');
+
+            trendLabel = '최근 1시간';
+            timeRangeHtml = `
+                <div class="sparkline-times">
+                    <span>${fmtShortTime(windowStart)}</span>
+                    <span>${fmtShortTime(windowStart + WINDOW_MS / 2)}</span>
+                    <span>${fmtShortTime(Date.now())}</span>
+                </div>
+            `;
+        } else {
+            // 폴백: 로컬 히스토리 최근 15회
+            const history = site.history || [];
+            const maxHistory = 15;
+            for (let i = 0; i < maxHistory; i++) {
+                const data = history[i] || null;
+                if (!data) {
+                    sparklineHtml += buildBar(null, 0, 'No data');
+                } else {
+                    const barTime = data.time ? new Date(data.time).toLocaleTimeString() : '';
+                    const barValue = data.online ? `${data.value}ms` : 'Error';
+                    sparklineHtml += buildBar(data.online, data.value, barTime ? `${barTime} · ${barValue}` : barValue);
+                }
+            }
+
+            const oldestEntry = history.find(h => h && h.time);
+            const newestEntry = [...history].reverse().find(h => h && h.time);
+            trendLabel = `최근 ${history.length}회`;
+            timeRangeHtml = (oldestEntry && newestEntry) ? `
+                <div class="sparkline-times">
+                    <span>${fmtShortTime(oldestEntry.time)}</span>
+                    <span>~</span>
+                    <span>${fmtShortTime(newestEntry.time)}</span>
+                </div>
+            ` : '';
+        }
 
         const currentResponseTime = result.responseTime ? `${result.responseTime}ms` : (result.status === 'pending' ? '...' : 'OFFLINE');
         const previewHtml = `
             <div class="sparkline-container">
                 <div class="sparkline-header">
-                    <span class="sparkline-title">RESPONSE TREND</span>
+                    <span class="sparkline-title">RESPONSE TREND${trendLabel ? ` <em class="trend-label">· ${trendLabel}</em>` : ''}</span>
                     <span class="sparkline-value">${currentResponseTime}</span>
                 </div>
                 <div class="sparkline-bars">

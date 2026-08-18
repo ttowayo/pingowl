@@ -282,6 +282,13 @@ header .container {
   opacity: 0.6;
 }
 
+.sparkline-title .trend-label {
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .sparkline-value {
   font-size: 0.85rem;
   font-weight: 800;
