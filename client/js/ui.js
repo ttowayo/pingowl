@@ -122,19 +122,19 @@ export const ui = {
 
         // 미니 그래프: 서버 로그 기반 "최근 1시간" 고정 창 (5분 단위 12칸)
         // 로그가 없으면(비로그인 등) 기존 히스토리 방식으로 폴백
-        const fmtShortTime = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // 좁은 영역에 맞게 24시간제 짧은 표기 (예: 16:08)
+        const fmtShortTime = ts => new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
+        // 범례와 1:1 대응 — 초록: 정상(< normal), 노랑: 느림(>= normal), 빨강: 다운
         const buildBar = (online, value, title) => {
             let barClass = 'bar-empty';
             let height = '4px';
             if (online !== null) {
                 if (!online) {
-                    barClass = 'bar-error';
+                    barClass = 'bar-danger';
                     height = '100%';
                 } else {
-                    if (value < safeThresholds.normal) barClass = 'bar-normal';
-                    else if (value < safeThresholds.slow) barClass = 'bar-warning';
-                    else barClass = 'bar-danger';
+                    barClass = value < safeThresholds.normal ? 'bar-normal' : 'bar-warning';
                     // 최대 slow 기준(기본 5000ms)으로 높이 계산 (최소 15% ~ 최대 100%)
                     height = `${Math.min(Math.max((value / safeThresholds.slow) * 100, 15), 100)}%`;
                 }
@@ -205,13 +205,18 @@ export const ui = {
         const previewHtml = `
             <div class="sparkline-container">
                 <div class="sparkline-header">
-                    <span class="sparkline-title">RESPONSE TREND${trendLabel ? ` <em class="trend-label">· ${trendLabel}</em>` : ''}</span>
+                    <span class="sparkline-title">응답 속도 · ${trendLabel || '기록 없음'}</span>
                     <span class="sparkline-value">${currentResponseTime}</span>
                 </div>
                 <div class="sparkline-bars">
                     ${sparklineHtml}
                 </div>
                 ${timeRangeHtml}
+                <div class="sparkline-legend">
+                    <span><i class="legend-dot dot-normal"></i>정상</span>
+                    <span><i class="legend-dot dot-warning"></i>느림</span>
+                    <span><i class="legend-dot dot-danger"></i>다운</span>
+                </div>
             </div>
         `;
 
@@ -223,8 +228,7 @@ export const ui = {
                 <button class="action-btn edit-btn" title="수정"><i class="ri-edit-line"></i></button>
                 <button class="action-btn delete-btn" title="삭제"><i class="ri-delete-bin-line"></i></button>
             </div>
-            <div class="site-preview history-mode">
-                <div class="browser-dots"><span></span><span></span><span></span></div>
+            <div class="site-preview history-mode" title="5분 간격으로 측정한 응답 속도입니다. 막대를 클릭하면 상세 로그를 볼 수 있어요.">
                 ${previewHtml}
             </div>
             <div class="site-info">

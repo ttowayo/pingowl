@@ -207,12 +207,18 @@ header .container {
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 1));
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.9),
+    rgba(15, 23, 42, 1)
+  );
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
 }
 
 .browser-dots {
@@ -231,9 +237,18 @@ header .container {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.browser-dots span:nth-child(1) { background: #ff5f56; opacity: 0.8; }
-.browser-dots span:nth-child(2) { background: #ffbd2e; opacity: 0.8; }
-.browser-dots span:nth-child(3) { background: #27c93f; opacity: 0.8; }
+.browser-dots span:nth-child(1) {
+  background: #ff5f56;
+  opacity: 0.8;
+}
+.browser-dots span:nth-child(2) {
+  background: #ffbd2e;
+  opacity: 0.8;
+}
+.browser-dots span:nth-child(3) {
+  background: #27c93f;
+  opacity: 0.8;
+}
 
 .site-preview img {
   width: 100%;
@@ -252,11 +267,17 @@ header .container {
 
 /* 히스토리 그래프 모드 (Sparkline) */
 .site-preview.history-mode {
-  padding: 30px 15px 15px 15px;
+  padding: 12px 14px 10px 14px;
+  height: 112px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6));
+  cursor: pointer;
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.4),
+    rgba(15, 23, 42, 0.6)
+  );
 }
 
 .sparkline-container {
@@ -275,25 +296,17 @@ header .container {
 }
 
 .sparkline-title {
-  font-size: 0.6rem;
-  font-weight: 800;
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--text-muted);
-  letter-spacing: 0.05em;
-  opacity: 0.6;
-}
-
-.sparkline-title .trend-label {
-  font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
+  white-space: nowrap;
 }
 
 .sparkline-value {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 800;
   color: var(--primary);
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   text-shadow: 0 0 10px rgba(77, 124, 255, 0.3);
 }
 
@@ -301,20 +314,48 @@ header .container {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  height: 40px;
+  height: 34px;
   gap: 3px;
 }
 
 .sparkline-times {
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: 3px;
   font-size: 0.55rem;
   font-weight: 600;
   color: var(--text-muted);
-  opacity: 0.6;
-  font-family: 'Inter', sans-serif;
+  opacity: 0.7;
+  font-family: "Inter", sans-serif;
+  letter-spacing: 0;
 }
+
+.sparkline-legend {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+.sparkline-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.dot-normal { background: var(--success); }
+.legend-dot.dot-warning { background: var(--warning); }
+.legend-dot.dot-danger { background: var(--danger); }
 
 .spark-bar {
   flex: 1;
@@ -392,6 +433,7 @@ a.site-url {
   font-size: 0.8rem;
   max-width: 200px;
   color: #3d465d;
+  word-wrap: break-word;
 }
 
 .site-metrics {
@@ -705,7 +747,7 @@ a.site-url {
 .log-stat .value {
   font-size: 1.3rem;
   font-weight: 800;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .log-stat .label {
@@ -783,7 +825,7 @@ a.site-url {
 
 .logs-table .num {
   text-align: right;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .log-pill {
@@ -794,9 +836,18 @@ a.site-url {
   border-radius: 20px;
 }
 
-.log-pill.success { background: rgba(0, 214, 143, 0.15); color: var(--success); }
-.log-pill.warning { background: rgba(255, 170, 0, 0.15); color: var(--warning); }
-.log-pill.danger  { background: rgba(255, 61, 113, 0.15); color: var(--danger); }
+.log-pill.success {
+  background: rgba(0, 214, 143, 0.15);
+  color: var(--success);
+}
+.log-pill.warning {
+  background: rgba(255, 170, 0, 0.15);
+  color: var(--warning);
+}
+.log-pill.danger {
+  background: rgba(255, 61, 113, 0.15);
+  color: var(--danger);
+}
 
 .logs-more-hint {
   margin-top: 10px;
