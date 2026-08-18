@@ -99,5 +99,18 @@ export const storage = {
         const data = await this.load();
         data.sites = data.sites.filter(site => site.id !== id);
         await this.save(data);
+
+        // 서버에 쌓인 해당 사이트의 체크 로그도 함께 삭제
+        const auth = this.getAuth();
+        if (auth) {
+            try {
+                await fetch(`${API_BASE}/api/logs?siteId=${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${auth.token}` }
+                });
+            } catch (error) {
+                console.warn('사이트 로그 삭제 실패:', error);
+            }
+        }
     }
 };

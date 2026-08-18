@@ -187,6 +187,24 @@
           </form>
         </div>
       </div>
+
+      <!-- Modal: Check Logs -->
+      <div id="modal-logs" class="modal">
+        <div class="modal-content logs-content">
+          <div class="modal-header">
+            <h2 id="logs-title">체크 로그</h2>
+            <button class="close-modal"><i class="ri-close-line"></i></button>
+          </div>
+          <div class="logs-toolbar">
+            <div class="logs-tabs">
+              <button type="button" class="logs-tab active" data-hours="24">24시간</button>
+              <button type="button" class="logs-tab" data-hours="72">3일</button>
+              <button type="button" class="logs-tab" data-hours="168">7일</button>
+            </div>
+          </div>
+          <div id="logs-body"></div>
+        </div>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
