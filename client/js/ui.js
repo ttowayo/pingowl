@@ -184,6 +184,7 @@ export const ui = {
         card.innerHTML = `
             <div class="site-actions">
                 <button class="action-btn drag-handle" title="순서 변경"><i class="ri-drag-move-fill"></i></button>
+                <button class="action-btn logs-btn" title="로그 보기"><i class="ri-bar-chart-2-line"></i></button>
                 <button class="action-btn check-btn" title="체크"><i class="ri-refresh-line"></i></button>
                 <button class="action-btn edit-btn" title="수정"><i class="ri-edit-line"></i></button>
                 <button class="action-btn delete-btn" title="삭제"><i class="ri-delete-bin-line"></i></button>
@@ -255,6 +256,109 @@ export const ui = {
 
     hideModal(modalId = 'modal-site') {
         document.getElementById(modalId).classList.remove('active');
+    },
+
+    // 로그 모달 열기 (로딩 상태)
+    showLogsModal(site) {
+        document.getElementById('logs-title').textContent = `${site.name} 체크 로그`;
+        document.getElementById('logs-body').innerHTML = `
+            <div class="logs-empty"><div class="spinner"></div><p>로그를 불러오는 중...</p></div>
+        `;
+        document.getElementById('modal-logs').classList.add('active');
+    },
+
+    // 로그 데이터 렌더링 (통계 + 그래프 + 테이블)
+    renderLogs(logs, hours, thresholds) {
+        const body = document.getElementById('logs-body');
+        const safeThresholds = thresholds || { normal: 2000, slow: 5000 };
+
+        if (!logs || logs.length === 0) {
+            body.innerHTML = `<div class="logs-empty"><i class="ri-ghost-line"></i><p>이 기간의 로그가 없습니다.<br>서버가 5분마다 체크하며 로그를 쌓습니다.</p></div>`;
+            return;
+        }
+
+        // API는 최신순으로 내려주므로 그래프용은 시간순으로 뒤집기
+        const asc = [...logs].reverse();
+
+        // 통계 계산
+        const total = logs.length;
+        const onlineCount = logs.filter(l => l.online).length;
+        const uptime = ((onlineCount / total) * 100).toFixed(1);
+        const onlineTimes = logs.filter(l => l.online).map(l => l.response_time);
+        const avg = onlineTimes.length ? Math.round(onlineTimes.reduce((a, b) => a + b, 0) / onlineTimes.length) : 0;
+        const max = onlineTimes.length ? Math.max(...onlineTimes) : 0;
+
+        // 응답 속도 그래프 (SVG)
+        const W = 640, H = 150, PAD = 6;
+        const n = asc.length;
+        const maxVal = Math.max(...asc.map(l => l.online ? l.response_time : 0), safeThresholds.normal);
+        const xPos = i => n === 1 ? W / 2 : PAD + (i / (n - 1)) * (W - PAD * 2);
+        const yPos = v => H - PAD - (Math.min(v, maxVal) / maxVal) * (H - PAD * 2);
+
+        const points = asc.map((l, i) => `${xPos(i).toFixed(1)},${yPos(l.online ? l.response_time : 0).toFixed(1)}`).join(' ');
+        const areaPath = `M ${xPos(0).toFixed(1)},${H - PAD} L ${points.split(' ').join(' L ')} L ${xPos(n - 1).toFixed(1)},${H - PAD} Z`;
+        const offlineMarks = asc.map((l, i) => !l.online
+            ? `<line x1="${xPos(i).toFixed(1)}" y1="${PAD}" x2="${xPos(i).toFixed(1)}" y2="${H - PAD}" class="log-offline-line"></line>`
+            : '').join('');
+        const slowLine = safeThresholds.slow <= maxVal
+            ? `<line x1="${PAD}" y1="${yPos(safeThresholds.slow).toFixed(1)}" x2="${W - PAD}" y2="${yPos(safeThresholds.slow).toFixed(1)}" class="log-slow-line"></line>`
+            : '';
+
+        const fmtRange = ts => new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+        // 체크 이력 테이블 (최신순, 최대 100건)
+        const rows = logs.slice(0, 100).map(l => {
+            let pill, pillClass;
+            if (!l.online) { pill = '다운'; pillClass = 'danger'; }
+            else if (l.response_time >= safeThresholds.slow) { pill = '느림'; pillClass = 'warning'; }
+            else { pill = '정상'; pillClass = 'success'; }
+            return `
+                <tr>
+                    <td>${new Date(l.checked_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                    <td class="num">${l.online ? l.response_time + 'ms' : '-'}</td>
+                    <td class="num">${l.status_code ?? '-'}</td>
+                    <td><span class="log-pill ${pillClass}">${pill}</span></td>
+                </tr>
+            `;
+        }).join('');
+
+        body.innerHTML = `
+            <div class="log-stats">
+                <div class="log-stat">
+                    <span class="value ${uptime >= 99 ? 'color-success' : (uptime >= 95 ? 'color-warning' : 'color-danger')}">${uptime}%</span>
+                    <span class="label">업타임 (${total}회 체크)</span>
+                </div>
+                <div class="log-stat">
+                    <span class="value">${avg}ms</span>
+                    <span class="label">평균 응답</span>
+                </div>
+                <div class="log-stat">
+                    <span class="value">${max}ms</span>
+                    <span class="label">최대 응답</span>
+                </div>
+            </div>
+
+            <svg viewBox="0 0 ${W} ${H}" class="log-chart" preserveAspectRatio="none">
+                ${slowLine}
+                <path d="${areaPath}" class="log-area"></path>
+                <polyline points="${points}" class="log-line"></polyline>
+                ${offlineMarks}
+            </svg>
+            <div class="sparkline-times log-chart-times">
+                <span>${fmtRange(asc[0].checked_at)}</span>
+                <span>${fmtRange(asc[n - 1].checked_at)}</span>
+            </div>
+
+            <div class="logs-table-wrap">
+                <table class="logs-table">
+                    <thead>
+                        <tr><th>체크 시각</th><th class="num">응답</th><th class="num">HTTP</th><th>상태</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            ${logs.length > 100 ? `<p class="logs-more-hint">최근 100건만 표시 (그래프·통계는 전체 ${total}건 기준)</p>` : ''}
+        `;
     },
 
     // WEB 페이지 체크 행 추가

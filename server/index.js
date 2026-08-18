@@ -27,6 +27,50 @@ if (!supabaseServiceKey) {
     console.warn('[Server] SUPABASE_SERVICE_ROLE_KEY가 설정되지 않았습니다. RLS가 켜진 테이블은 조회/저장이 실패할 수 있습니다.');
 }
 
+// --- 이메일 알림 설정 (SMTP 환경변수가 있을 때만 활성화) ---
+const nodemailer = require('nodemailer');
+const mailTransport = (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    ? nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: (Number(process.env.SMTP_PORT) || 587) === 465,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    })
+    : null;
+
+if (!mailTransport) {
+    console.warn('[Mail] SMTP 환경변수(SMTP_HOST/SMTP_USER/SMTP_PASS)가 없어 이메일 알림이 비활성화됩니다.');
+}
+
+// 계정 이메일 조회 (service_role 필요)
+async function getUserEmail(userId) {
+    try {
+        const { data, error } = await supabase.auth.admin.getUserById(userId);
+        if (error) throw error;
+        return data.user ? data.user.email : null;
+    } catch (e) {
+        console.error('[Mail] 사용자 이메일 조회 실패:', e.message);
+        return null;
+    }
+}
+
+async function sendAlertMail(to, subject, text) {
+    if (!mailTransport || !to) return;
+    try {
+        await mailTransport.sendMail({
+            from: process.env.MAIL_FROM || process.env.SMTP_USER,
+            to,
+            subject,
+            text
+        });
+        console.log(`[Mail] 발송 완료: ${to} - ${subject}`);
+    } catch (e) {
+        console.error('[Mail] 발송 실패:', e.message);
+    }
+}
+
+const KST = { timeZone: 'Asia/Seoul' };
+
 app.use(cors());
 app.use(express.json());
 // Render 등 배포 환경에서는 상대 경로 주의
@@ -304,6 +348,24 @@ app.get('/api/logs', authenticateToken, async (req, res) => {
     res.json(data);
 });
 
+// 사이트 삭제 시 해당 사이트의 로그도 함께 삭제
+app.delete('/api/logs', authenticateToken, async (req, res) => {
+    const { siteId } = req.query;
+    if (!siteId) return res.status(400).json({ error: 'siteId가 필요합니다.' });
+
+    const { error } = await supabase
+        .from('check_logs')
+        .delete()
+        .eq('user_id', req.user.id)
+        .eq('site_id', String(siteId));
+
+    if (error) {
+        console.error('[API] 로그 삭제 오류:', error.message);
+        return res.status(500).json({ error: error.message });
+    }
+    res.json({ message: '로그 삭제 완료' });
+});
+
 // 헬스체크
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -344,10 +406,16 @@ async function runBackgroundMonitor() {
 
             let isUpdated = false;
             const logRows = []; // check_logs 테이블에 쌓을 로그
+            const alertEvents = []; // 이메일 알림 대상 (상태가 바뀐 것만)
 
             // 해당 사용자의 모든 사이트 체크
             for (const site of appData.sites) {
                 if (site.enabled === false) continue;
+
+                // 직전 상태 (상태 변화 감지용 — 첫 체크는 정상으로 간주)
+                const prevEntry = (site.history && site.history.length) ? site.history[site.history.length - 1] : null;
+                const prevOnline = prevEntry ? prevEntry.online : true;
+                let mainOnline = false;
 
                 const start = Date.now();
                 try {
@@ -360,6 +428,14 @@ async function runBackgroundMonitor() {
 
                     const responseTime = Date.now() - start;
                     const online = response.status >= 200 && response.status < 400;
+                    mainOnline = online;
+
+                    // 다운/복구 상태 변화 감지
+                    if (prevOnline && !online) {
+                        alertEvents.push({ type: 'down', site, detail: `HTTP ${response.status}` });
+                    } else if (!prevOnline && online) {
+                        alertEvents.push({ type: 'up', site, detail: `${responseTime}ms` });
+                    }
 
                     // 2. 히스토리 업데이트
                     if (!site.history) site.history = [];
@@ -389,6 +465,9 @@ async function runBackgroundMonitor() {
                     // (옵션) 키워드 체크 등 추가 로직이 필요하면 여기서 수행 가능
                 } catch (err) {
                     console.error(`[Background] 체크 실패 (${site.url}):`, err.message);
+                    if (prevOnline) {
+                        alertEvents.push({ type: 'down', site, detail: err.message });
+                    }
                     if (!site.history) site.history = [];
                     site.history.push({ time: Date.now(), value: 0, online: false });
                     if (site.history.length > 15) site.history.shift();
@@ -405,6 +484,44 @@ async function runBackgroundMonitor() {
                         online: false
                     });
                 }
+
+                // 3. 하위 체크 (WEB 키워드 / API 상태) — 메인 사이트가 살아있을 때만 수행
+                if (mainOnline) {
+                    for (const check of (site.checks || [])) {
+                        if (check.enabled === false) continue;
+
+                        let ok = false;
+                        let statusCode = null;
+                        try {
+                            const r = await axios.get(check.url, {
+                                timeout: 10000,
+                                headers: { 'User-Agent': 'PingOwl-Monitor/1.0' },
+                                validateStatus: () => true
+                            });
+                            statusCode = r.status;
+                            if (check.type === 'api' || check.keyword === 'OK_STATUS_CHECK') {
+                                ok = r.status >= 200 && r.status < 300;
+                            } else {
+                                const html = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+                                ok = r.status < 400 && html.includes(check.keyword);
+                            }
+                        } catch (e) {
+                            ok = false;
+                        }
+
+                        // 직전 상태와 비교해 변화가 있을 때만 알림 (첫 체크는 정상으로 간주)
+                        const prevOk = check.lastOk !== false;
+                        if (prevOk && !ok) {
+                            alertEvents.push({ type: 'check-error', site, check, detail: statusCode ? `HTTP ${statusCode}` : '접속 실패' });
+                        } else if (!prevOk && ok) {
+                            alertEvents.push({ type: 'check-ok', site, check });
+                        }
+                        if (check.lastOk !== ok) {
+                            check.lastOk = ok;
+                            isUpdated = true;
+                        }
+                    }
+                }
             }
 
             // 변경 사항이 있으면 DB에 저장
@@ -413,6 +530,32 @@ async function runBackgroundMonitor() {
                     .from('sites')
                     .update({ data: appData, updated_at: new Date().toISOString() })
                     .eq('user_id', userId);
+            }
+
+            // 상태 변화가 있으면 계정 이메일로 알림 발송
+            if (alertEvents.length > 0 && mailTransport) {
+                const email = await getUserEmail(userId);
+                const now = new Date().toLocaleString('ko-KR', KST);
+                for (const ev of alertEvents) {
+                    let subject, text;
+                    if (ev.type === 'down') {
+                        subject = `🔴 [PingOwl] ${ev.site.name} 사이트 다운`;
+                        text = `사이트에 접속할 수 없습니다.\n\n사이트: ${ev.site.name}\nURL: ${ev.site.url}\n상태: ${ev.detail}\n시각: ${now}`;
+                    } else if (ev.type === 'up') {
+                        subject = `✅ [PingOwl] ${ev.site.name} 복구됨`;
+                        text = `사이트가 다시 정상 응답합니다.\n\n사이트: ${ev.site.name}\nURL: ${ev.site.url}\n응답 속도: ${ev.detail}\n시각: ${now}`;
+                    } else if (ev.type === 'check-error') {
+                        subject = `⚠️ [PingOwl] ${ev.site.name} - ${ev.check.name} 에러`;
+                        const reason = ev.check.type === 'api'
+                            ? `API 응답 이상 (${ev.detail})`
+                            : `"${ev.check.keyword}" 키워드를 찾을 수 없습니다. (${ev.detail})`;
+                        text = `하위 페이지 체크에 실패했습니다.\n\n사이트: ${ev.site.name}\n체크: ${ev.check.name}\nURL: ${ev.check.url}\n원인: ${reason}\n시각: ${now}`;
+                    } else {
+                        subject = `✅ [PingOwl] ${ev.site.name} - ${ev.check.name} 정상화`;
+                        text = `하위 페이지 체크가 다시 정상입니다.\n\n사이트: ${ev.site.name}\n체크: ${ev.check.name}\nURL: ${ev.check.url}\n시각: ${now}`;
+                    }
+                    await sendAlertMail(email, subject, text);
+                }
             }
 
             // 체크 로그 적재 (테이블이 없어도 모니터링 자체는 계속 동작)

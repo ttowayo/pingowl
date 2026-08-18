@@ -21,11 +21,67 @@ async function init() {
     
     // 자동 새로고침 설정 (로그인 시에만)
     if (storage.getAuth()) {
+        initNotifications();
         await checkAllSites();
         refreshIntervalId = setInterval(checkAllSites, (appData.settings.refreshInterval || 300) * 1000);
     } else {
         render(); // 비로그인 시 기본 렌더링
     }
+}
+
+// --- 브라우저 알림 (에러 발생/복구 시) ---
+
+// 사이트·체크별로 마지막 에러 상태를 기억해서 상태가 바뀔 때만 알림 (5분마다 반복 알림 방지)
+const notifiedErrors = new Map();
+
+function initNotifications() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function sendNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+        new Notification(title, { body, icon: '/favicon.ico', tag: title });
+    } catch (e) {
+        console.warn('알림 표시 실패:', e);
+    }
+}
+
+function notifyCheckResult(site, result) {
+    if (!result || result.status === 'pending') return;
+
+    // 1. 사이트 자체 다운 / 복구
+    const siteKey = `site:${site.id}`;
+    if (!result.online) {
+        if (!notifiedErrors.get(siteKey)) {
+            notifiedErrors.set(siteKey, true);
+            sendNotification(`🔴 ${site.name} 사이트 다운`, `${site.url} 에 접속할 수 없습니다.`);
+        }
+    } else if (notifiedErrors.get(siteKey)) {
+        notifiedErrors.set(siteKey, false);
+        sendNotification(`✅ ${site.name} 복구됨`, `사이트가 다시 정상 응답합니다. (${result.responseTime || '-'}ms)`);
+    }
+
+    // 2. WEB 페이지 / API 체크 에러 및 정상화
+    (result.checkResults || []).forEach(check => {
+        if (check.status === 'pending') return;
+        const key = `check:${site.id}:${check.id || check.name}`;
+        const isError = !check.exists;
+
+        if (isError && !notifiedErrors.get(key)) {
+            notifiedErrors.set(key, true);
+            const detail = check.type === 'api'
+                ? `API 응답 이상 (HTTP ${check.status || '접속 실패'})`
+                : `"${check.keyword}" 키워드를 찾을 수 없습니다. (HTTP ${check.status || '접속 실패'})`;
+            sendNotification(`⚠️ ${site.name} - ${check.name} 에러`, detail);
+        } else if (!isError && notifiedErrors.get(key)) {
+            notifiedErrors.set(key, false);
+            sendNotification(`✅ ${site.name} - ${check.name} 정상화`, '체크가 다시 정상으로 돌아왔습니다.');
+        }
+    });
 }
 
 /**
@@ -86,6 +142,14 @@ function setupEventListeners() {
         btn.onclick = () => {
             ui.hideModal('modal-site');
             ui.hideModal('modal-auth');
+            ui.hideModal('modal-logs');
+        };
+    });
+
+    // 로그 모달 기간 탭 (24시간 / 3일 / 7일)
+    document.querySelectorAll('.logs-tab').forEach(tab => {
+        tab.onclick = () => {
+            if (currentLogSite) openLogsModal(currentLogSite, Number(tab.dataset.hours));
         };
     });
     
@@ -212,8 +276,42 @@ function setupEventListeners() {
             btn.innerHTML = '<i class="ri-loader-4-line spin"></i>';
             btn.disabled = true;
             await checkSingleSite(site);
+        } else if (e.target.closest('.logs-btn') || e.target.closest('.site-preview')) {
+            // 로그 버튼 또는 스파크라인 그래프 클릭 시 로그 모달
+            openLogsModal(site);
         }
     };
+}
+
+/**
+ * 체크 로그 모달 열기 (서버에 쌓인 로그 조회)
+ */
+let currentLogSite = null;
+async function openLogsModal(site, hours = 24) {
+    if (!site) return;
+    currentLogSite = site;
+
+    document.querySelectorAll('.logs-tab').forEach(t =>
+        t.classList.toggle('active', Number(t.dataset.hours) === hours)
+    );
+    ui.showLogsModal(site);
+
+    const auth = storage.getAuth();
+    if (!auth) {
+        document.getElementById('logs-body').innerHTML = '<div class="logs-empty"><p>로그인이 필요합니다.</p></div>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/logs?siteId=${encodeURIComponent(site.id)}&hours=${hours}&limit=2000`, {
+            headers: { 'Authorization': `Bearer ${auth.token}` }
+        });
+        if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+        const logs = await res.json();
+        ui.renderLogs(logs, hours, appData.settings.responseTimeThresholds);
+    } catch (err) {
+        document.getElementById('logs-body').innerHTML = `<div class="logs-empty"><p>로그를 불러오지 못했습니다.<br>${err.message}</p></div>`;
+    }
 }
 
 /**
@@ -261,6 +359,7 @@ async function checkSingleSite(site) {
     await storage.updateSite(site);
 
     appData.results[index] = result;
+    notifyCheckResult(site, result);
     render(); // 최종 결과와 그래프를 함께 렌더링
 }
 
@@ -295,6 +394,7 @@ async function checkAllSites() {
                 checkResults: site.checks.map(c => ({ ...c, status: 'error', exists: false }))
             };
         }
+        notifyCheckResult(site, appData.results[index]);
         render();
     });
 
