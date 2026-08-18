@@ -1,1 +1,15 @@
 node_modules
+
+# 환경변수 (Supabase 키 등 비밀 정보 — 절대 커밋 금지)
+.env
+.env.*
+server/.env
+client/.env
+client/.env.*
+
+# 빌드 결과물
+client/dist
+dist
+
+# 로그
+*.log
